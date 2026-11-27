@@ -484,21 +484,41 @@ enum JBInstaller {
         [ -x "$Ldid" ] || Ldid="/usr/bin/ldid"
         [ -x "$Ldid" ] || Ldid="$TMP/TrollStore.app/ldid"
         if [ -x "$Ldid" ]; then
+          # 先写 entitlements，再打 platform-application，trollstorehelper 才能装东西
+        cat > "$TMP/ents.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>platform-application</key><true/>
+  <key>com.apple.private.security.no-sandbox</key><true/>
+  <key>com.apple.private.security.container-required</key><false/>
+  <key>com.apple.private.cs.debugger</key><true/>
+  <key>get-task-allow</key><true/>
+</dict></plist>
+PLIST
+        [ -f "$TMP/ents.plist" ] || { echo "STEP_FAIL write ents.plist"; exit 13; }
+
+        if [ -x "$Ldid" ]; then
           echo "STEP ldid platform-application"
-          "$Ldid" -S"$TMP/ents.plist" "$TMP/TrollStore.app/trollstorehelper" 2>&1
-          "$Ldid" -S"$TMP/ents.plist" "$TMP/TrollStore.app/TrollStore" 2>&1
-          "$Ldid" -S"$TMP/ents.plist" "$TMP/TrollStore.app/PersistenceHelper" 2>&1
+          chmod +x "$TMP/TrollStore.app/trollstorehelper" "$TMP/TrollStore.app/TrollStore" "$TMP/TrollStore.app/PersistenceHelper" 2>/dev/null
+          "$Ldid" -S"$TMP/ents.plist" "$TMP/TrollStore.app/trollstorehelper" 2>&1 || echo "STEP note ldid helper"
+          "$Ldid" -S"$TMP/ents.plist" "$TMP/TrollStore.app/TrollStore" 2>&1 || echo "STEP note ldid app"
+          "$Ldid" -S"$TMP/ents.plist" "$TMP/TrollStore.app/PersistenceHelper" 2>&1 || echo "STEP note ldid ph"
         else
           echo "STEP ldid missing"
         fi
 
+        # 走官方 helper 的 install：它通过 installd 落到 /var/containers，不需要我们自己 cp
         echo "STEP install app"
-        UUID=$(uuidgen)
-        DEST="/var/containers/Bundle/Application/$UUID"
-        mkdir -p "$DEST" || { echo "STEP_FAIL mkdir $DEST"; exit 13; }
-        cp -a "$TMP/TrollStore.app" "$DEST/TrollStore.app" || { echo "STEP_FAIL cp"; exit 14; }
-        chown -R mobile:mobile "$DEST" 2>/dev/null
-
+        H="$TMP/TrollStore.app/trollstorehelper"
+        "$H" install "$TMP/TrollStore.app" 2>&1
+        RC=$?
+        echo "STEP helper-rc $RC"
+        if [ $RC -ne 0 ]; then
+          echo "STEP_FAIL install app rc=$RC"
+          exit 14
+        fi
+        "$H" refresh 2>&1 || true
         echo "STEP launchdaemon"
         LDDIR="$JB/Library/LaunchDaemons"
         mkdir -p "$LDDIR"
