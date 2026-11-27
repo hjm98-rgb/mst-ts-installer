@@ -79,7 +79,7 @@ func getCandidates() -> [InstalledApp] {
 }
 
 @discardableResult
-func doDirectInstall(_ device: Device) async -> Bool {
+func doDirectInstall(_ device: Device, askPersistenceHelper: Bool = true) async -> Bool {
     
     let exploit = selectExploit(device)
     
@@ -195,12 +195,17 @@ func doDirectInstall(_ device: Device) async -> Bool {
     let newCandidates = getCandidates()
     persistenceHelperCandidates = newCandidates
     
-    DispatchQueue.main.sync {
-        HelperAlert.shared.showAlert = true
-        HelperAlert.shared.objectWillChange.send()
+    var persistenceID = ""
+    if askPersistenceHelper {
+        await MainActor.run {
+            HelperAlert.shared.showAlert = true
+            HelperAlert.shared.objectWillChange.send()
+        }
+        while await MainActor.run(body: { HelperAlert.shared.showAlert }) { await Task.sleep(nanoseconds: 200_000_000) }
+        persistenceID = TIXDefaults().string(forKey: "persistenceHelper")
+    } else {
+        Logger.log("跳过 persistence helper 选择（越狱侧已有 Sileo/Filza）")
     }
-    while HelperAlert.shared.showAlert { }
-    let persistenceID = TIXDefaults().string(forKey: "persistenceHelper")
     
     if persistenceID != "" {
         if install_persistence_helper(persistenceID) {
@@ -337,7 +342,7 @@ func doJailbreakInstall(_ device: Device) async -> Bool {
     // 原版 Helper 只在 uid==0 下工作（RootHelper/main.m: getuid()==0 → rootHelperMain），
     // 而 mobile 进程拿不到 root。所以越狱安装同样必须走内核漏洞提权，再调用 install_trollstore。
     Logger.log("改用原版直接安装流程（内核漏洞 → unsandbox → root → install_trollstore）", type: .info)
-    let ok = await doDirectInstall(device)
+    let ok = await doDirectInstall(device, askPersistenceHelper: false)
     if ok {
         Logger.log("TrollStore 已由 root 安装完成（app 容器已建、已标记 TrollStore app）", type: .success)
     } else {
