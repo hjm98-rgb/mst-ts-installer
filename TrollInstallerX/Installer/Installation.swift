@@ -484,6 +484,14 @@ enum JBInstaller {
           fi
         done
         rm -rf "$JB/tmp"/mst-ts-* 2>/dev/null
+        echo "STEP drop LS db"
+        # 注册记录在 LaunchServices/FrontBoard 数据库里，删 bundle 不会自己消失
+        rm -rf /var/mobile/Library/FrontBoard/applicationState.db 2>&1
+        rm -rf /var/mobile/Library/FrontBoard/applicationState.db-wal 2>&1
+        rm -rf /var/mobile/Library/FrontBoard/applicationState.db-shm 2>&1
+        rm -f /var/mobile/Library/MobileInstallation/LastLaunchServicesMap.plist 2>&1
+        rm -f /var/mobile/Library/Caches/com.apple.mobile.installation.plist 2>&1
+        ls -l /var/mobile/Library/FrontBoard/ 2>&1 | head -10
         echo "STEP uicache"
         UIC="$JB/usr/bin/uicache"
         [ -x "$UIC" ] || UIC="/usr/bin/uicache"
