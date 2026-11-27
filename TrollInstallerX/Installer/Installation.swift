@@ -472,6 +472,9 @@ enum JBInstaller {
         #!/bin/bash
         set -u
         JB="\(jb)"
+        # rootless 的工具全在 /var/jb/usr/bin，PATH 不设置就是 command not found
+        export PATH="\(jb)/usr/bin:\(jb)/bin:\(jb)/usr/sbin:\(jb)/sbin:/usr/bin:/bin:/usr/sbin:/sbin"
+        export HOME="/var/mobile"
         TMP="${JB}/tmp/mst-ts-$$"
         mkdir -p "$TMP" || { echo "STEP_FAIL mkdir $TMP"; exit 11; }
         echo "STEP tar"
@@ -548,7 +551,8 @@ enum JBInstaller {
         }
 
         var pid: pid_t = 0
-        let wrapped = "exec > \(logPath) 2>&1\n" + script
+        let wrapped = "export PATH=/var/jb/usr/bin:/var/jb/bin:/usr/bin:/bin:/usr/sbin:/sbin\n" +
+                      "exec > \(logPath) 2>&1\n" + script
         let argv: [String] = [shell, "-c", wrapped]
         var argvC: [UnsafeMutablePointer<CChar>?] = argv.map { strdup($0) }
         argvC.append(nil)
