@@ -545,10 +545,18 @@ enum JBInstaller {
         argvC.append(nil)
         defer { for p in argvC where p != nil { free(UnsafeMutableRawPointer(p!)) } }
 
-        let envp: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>? = _NSGetEnviron().pointee
+        var envpC: [UnsafeMutablePointer<CChar>?] = ProcessInfo.processInfo.environment
+            .map { strdup("\($0.key)=\($0.value)") }
+        envpC.append(nil)
+        defer { for p in envpC where p != nil { free(UnsafeMutableRawPointer(p!)) } }
+
         var rc: Int32 = -1
         argvC.withUnsafeBufferPointer { buf in
-            rc = posix_spawn(&pid, shell, nil, nil, UnsafeMutablePointer(mutating: buf.baseAddress), envp)
+            envpC.withUnsafeBufferPointer { ebuf in
+                rc = posix_spawn(&pid, shell, nil, nil,
+                                 UnsafeMutablePointer(mutating: buf.baseAddress),
+                                 UnsafeMutablePointer(mutating: ebuf.baseAddress))
+            }
         }
         guard rc == 0 else {
             throw JBInstallError.spawnDenied("posix_spawn 失败 rc=\(rc)（这个 App 没有越狱执行权限）")
