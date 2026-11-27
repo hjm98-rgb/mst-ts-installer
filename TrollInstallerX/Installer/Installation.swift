@@ -333,26 +333,17 @@ func doIndirectInstall(_ device: Device) async -> Bool {
 func doJailbreakInstall(_ device: Device) async -> Bool {
     let jb = JailbreakDetector.check()
     Logger.log("越狱检测：\(jb.summary)")
-    guard jb.isJailbroken else {
-        Logger.log("未检测到越狱，越狱安装不可用；请用普通安装", type: .error)
-        return false
+
+    // 原版 Helper 只在 uid==0 下工作（RootHelper/main.m: getuid()==0 → rootHelperMain），
+    // 而 mobile 进程拿不到 root。所以越狱安装同样必须走内核漏洞提权，再调用 install_trollstore。
+    Logger.log("改用原版直接安装流程（内核漏洞 → unsandbox → root → install_trollstore）", type: .info)
+    let ok = await doDirectInstall(device)
+    if ok {
+        Logger.log("TrollStore 已由 root 安装完成（app 容器已建、已标记 TrollStore app）", type: .success)
+    } else {
+        Logger.log("越狱安装失败：直接安装流程未完成", type: .error)
     }
-    do {
-        let payload = try JBInstaller.stagePayload()
-        Logger.log("payload：\(payload)")
-        let dir = (payload as NSString).deletingLastPathComponent
-        JBInstaller.spellingEnsureEntitlements(at: dir)
-        let script = JBInstaller.installScript(payload: payload, rootless: jb.rootless)
-        let (ok, out) = try JBInstaller.run(script: script, rootless: jb.rootless)
-        for line in out.split(separator: "\n") where !line.isEmpty {
-            Logger.log(String(line), type: line.contains("STEP_FAIL") ? .error : .info)
-        }
-        if ok { Logger.log("TrollStore 已装入，用 uicache 刷图标后桌面出现", type: .success) }
-        return ok
-    } catch {
-        Logger.log("越狱安装失败：\(error.localizedDescription)", type: .error)
-        return false
-    }
+    return ok
 }
 
 
