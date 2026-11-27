@@ -511,16 +511,35 @@ enum JBInstaller {
         "$H" install "$TMP/TrollStore.app" 2>&1
         RC=$?
         echo "STEP helper-rc $RC"
-        if [ $RC -ne 0 ]; then
-          echo "STEP_FAIL install app rc=$RC"
-          exit 14
+        DEST=""
+        if [ $RC -eq 0 ]; then
+          DEST="$TMP/TrollStore.app"
+          "$H" refresh 2>&1 || true
+        else
+          # rootless 下 App 是 mobile，拿不到 root；改走 /var/jb/Applications（mobile 可写）
+          echo "STEP rootless fallback"
+          APPDIR="$JB/Applications"
+          mkdir -p "$APPDIR" || { echo "STEP_FAIL mkdir $APPDIR"; exit 15; }
+          DEST="$APPDIR/TrollStore.app"
+          rm -rf "$DEST"
+          cp -a "$TMP/TrollStore.app" "$DEST" || { echo "STEP_FAIL cp $DEST"; exit 16; }
+          chown -R mobile:mobile "$DEST" 2>/dev/null
+          chmod -R +x "$DEST" 2>/dev/null
+          if [ -x "$Ldid" ]; then
+            "$Ldid" -S"$ENT" "$DEST/trollstorehelper" 2>&1 || true
+            "$Ldid" -S"$ENT" "$DEST/TrollStore" 2>&1 || true
+            "$Ldid" -S"$ENT" "$DEST/PersistenceHelper" 2>&1 || true
+          fi
+          echo "STEP installed $DEST"
         fi
-        "$H" refresh 2>&1 || true
 
         echo "STEP uicache"
         UIC="$JB/usr/bin/uicache"
         [ -x "$UIC" ] || UIC="/usr/bin/uicache"
-        if [ -x "$UIC" ]; then "$UIC" -a 2>&1; fi
+        if [ -x "$UIC" ]; then
+          [ -n "$DEST" ] && "$UIC" -p "$DEST" 2>&1
+          "$UIC" -a 2>&1
+        fi
         echo "STEP icon-cache"
         rm -rf /var/mobile/Library/Caches/com.apple.IconsCache 2>/dev/null
         rm -rf /var/mobile/Library/Caches/com.apple.SpringBoard 2>/dev/null
