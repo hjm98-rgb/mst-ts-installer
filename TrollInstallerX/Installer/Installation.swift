@@ -486,16 +486,16 @@ enum JBInstaller {
         if [ -x "$Ldid" ]; then
           # 先写 entitlements，再打 platform-application，trollstorehelper 才能装东西
         cat > "$TMP/ents.plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>platform-application</key><true/>
-  <key>com.apple.private.security.no-sandbox</key><true/>
-  <key>com.apple.private.security.container-required</key><false/>
-  <key>com.apple.private.cs.debugger</key><true/>
-  <key>get-task-allow</key><true/>
-</dict></plist>
-PLIST
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0"><dict>
+        <key>platform-application</key><true/>
+        <key>com.apple.private.security.no-sandbox</key><true/>
+        <key>com.apple.private.security.container-required</key><false/>
+        <key>com.apple.private.cs.debugger</key><true/>
+        <key>get-task-allow</key><true/>
+        </dict></plist>
+        PLIST
         [ -f "$TMP/ents.plist" ] || { echo "STEP_FAIL write ents.plist"; exit 13; }
 
         if [ -x "$Ldid" ]; then
