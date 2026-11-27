@@ -519,29 +519,10 @@ PLIST
           exit 14
         fi
         "$H" refresh 2>&1 || true
-        echo "STEP launchdaemon"
-        LDDIR="$JB/Library/LaunchDaemons"
-        mkdir -p "$LDDIR"
-        cat > "$LDDIR/com.opa334.trollstorehelper.plist" <<PLIST
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0"><dict>
-          <key>Label</key><string>com.opa334.trollstorehelper</string>
-          <key>ProgramArguments</key><array><string>$DEST/TrollStore.app/trollstorehelper</string><string>install</string><string>$DEST/TrollStore.app</string></array>
-          <key>RunAtLoad</key><false/>
-          <key>KeepAlive</key><false/>
-        </dict></plist>
-        PLIST
-        launchctl bootout system "$LDDIR/com.opa334.trollstorehelper.plist" 2>/dev/null
-        launchctl bootstrap system "$LDDIR/com.opa334.trollstorehelper.plist" 2>&1 || echo "STEP note launchctl bootstrap skipped"
-
         echo "STEP uicache"
         UIC="$JB/usr/bin/uicache"
         [ -x "$UIC" ] || UIC="/usr/bin/uicache"
-        if [ -x "$UIC" ]; then
-          "$UIC" -p "$DEST/TrollStore.app" 2>&1
-          "$UIC" -a 2>&1
-        fi
+        [ -x "$UIC" ] && "$UIC" -a 2>&1
         echo "STEP icon-cache"
         # 白图标就是缓存没刷：清该 App 的图标缓存再重启 SpringBoard
         rm -rf /var/mobile/Library/Caches/com.apple.IconsCache 2>/dev/null
