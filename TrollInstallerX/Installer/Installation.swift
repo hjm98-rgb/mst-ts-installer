@@ -472,43 +472,40 @@ enum JBInstaller {
         #!/bin/bash
         set -u
         JB="\(jb)"
-        # rootless 的工具全在 /var/jb/usr/bin，PATH 不设置就是 command not found
         export PATH="\(jb)/usr/bin:\(jb)/bin:\(jb)/usr/sbin:\(jb)/sbin:/usr/bin:/bin:/usr/sbin:/sbin"
         export HOME="/var/mobile"
         TMP="${JB}/tmp/mst-ts-$$"
+        ENT="$TMP/ents.plist"
         mkdir -p "$TMP" || { echo "STEP_FAIL mkdir $TMP"; exit 11; }
         echo "STEP tar"
         tar xf "\(payload)" -C "$TMP" 2>&1 || { echo "STEP_FAIL tar"; exit 12; }
+        chmod -R +x "$TMP/TrollStore.app" 2>/dev/null
+
+        echo "STEP write ents"
+        {
+        echo '<?xml version="1.0" encoding="UTF-8"?>'
+        echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">'
+        echo '<plist version="1.0"><dict>'
+        echo '<key>platform-application</key><true/>'
+        echo '<key>com.apple.private.security.no-sandbox</key><true/>'
+        echo '<key>com.apple.private.security.container-required</key><false/>'
+        echo '<key>com.apple.private.cs.debugger</key><true/>'
+        echo '<key>get-task-allow</key><true/>'
+        echo '</dict></plist>'
+        } > "$ENT"
+        [ -s "$ENT" ] || { echo "STEP_FAIL write ents.plist"; exit 13; }
 
         Ldid="$JB/usr/bin/ldid"
         [ -x "$Ldid" ] || Ldid="/usr/bin/ldid"
-        [ -x "$Ldid" ] || Ldid="$TMP/TrollStore.app/ldid"
-        if [ -x "$Ldid" ]; then
-          # 先写 entitlements，再打 platform-application，trollstorehelper 才能装东西
-        cat > "$TMP/ents.plist" <<PLIST
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0"><dict>
-        <key>platform-application</key><true/>
-        <key>com.apple.private.security.no-sandbox</key><true/>
-        <key>com.apple.private.security.container-required</key><false/>
-        <key>com.apple.private.cs.debugger</key><true/>
-        <key>get-task-allow</key><true/>
-        </dict></plist>
-        PLIST
-        [ -f "$TMP/ents.plist" ] || { echo "STEP_FAIL write ents.plist"; exit 13; }
-
         if [ -x "$Ldid" ]; then
           echo "STEP ldid platform-application"
-          chmod +x "$TMP/TrollStore.app/trollstorehelper" "$TMP/TrollStore.app/TrollStore" "$TMP/TrollStore.app/PersistenceHelper" 2>/dev/null
-          "$Ldid" -S"$TMP/ents.plist" "$TMP/TrollStore.app/trollstorehelper" 2>&1 || echo "STEP note ldid helper"
-          "$Ldid" -S"$TMP/ents.plist" "$TMP/TrollStore.app/TrollStore" 2>&1 || echo "STEP note ldid app"
-          "$Ldid" -S"$TMP/ents.plist" "$TMP/TrollStore.app/PersistenceHelper" 2>&1 || echo "STEP note ldid ph"
+          "$Ldid" -S"$ENT" "$TMP/TrollStore.app/trollstorehelper" 2>&1 || echo "STEP note ldid helper"
+          "$Ldid" -S"$ENT" "$TMP/TrollStore.app/TrollStore" 2>&1 || echo "STEP note ldid app"
+          "$Ldid" -S"$ENT" "$TMP/TrollStore.app/PersistenceHelper" 2>&1 || echo "STEP note ldid ph"
         else
           echo "STEP ldid missing"
         fi
 
-        # 走官方 helper 的 install：它通过 installd 落到 /var/containers，不需要我们自己 cp
         echo "STEP install app"
         H="$TMP/TrollStore.app/trollstorehelper"
         "$H" install "$TMP/TrollStore.app" 2>&1
@@ -519,17 +516,16 @@ enum JBInstaller {
           exit 14
         fi
         "$H" refresh 2>&1 || true
+
         echo "STEP uicache"
         UIC="$JB/usr/bin/uicache"
         [ -x "$UIC" ] || UIC="/usr/bin/uicache"
-        [ -x "$UIC" ] && "$UIC" -a 2>&1
+        if [ -x "$UIC" ]; then "$UIC" -a 2>&1; fi
         echo "STEP icon-cache"
-        # 白图标就是缓存没刷：清该 App 的图标缓存再重启 SpringBoard
         rm -rf /var/mobile/Library/Caches/com.apple.IconsCache 2>/dev/null
         rm -rf /var/mobile/Library/Caches/com.apple.SpringBoard 2>/dev/null
         echo "STEP respring"
         killall -9 SpringBoard 2>/dev/null || sbreload 2>/dev/null || true
-
         rm -rf "$TMP"
         echo "STEP done"
         """
