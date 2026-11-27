@@ -477,6 +477,17 @@ enum JBInstaller {
         TMP="${JB}/tmp/mst-ts-$$"
         ENT="$TMP/ents.plist"
         mkdir -p "$TMP" || { echo "STEP_FAIL mkdir $TMP"; exit 11; }
+        echo "STEP probe"
+        id 2>&1
+        echo "uid=$(id -u 2>/dev/null) euid=$(id -u 2>/dev/null)"
+        for d in "$JB" "$JB/Applications" "/var/containers/Bundle/Application" "/var/mobile/Documents" "/var/mobile/Library"; do
+          if [ -w "$d" ]; then W=yes; else W=no; fi
+          printf "DIR %s writable=%s owner=%s\n" "$d" "$W" "$(ls -ld "$d" 2>/dev/null | awk '{print $3}')(raw)"
+        done
+        echo "STEP sudo probe"
+        if command -v sudo >/dev/null 2>&1; then sudo -n id 2>&1 || echo "sudo: needs password"; else echo "sudo: not found"; fi
+        echo "STEP ts-lite probe"
+        ls -d "$JB/Applications"/*.app 2>/dev/null | head -20
         echo "STEP tar"
         tar xf "\(payload)" -C "$TMP" 2>&1 || { echo "STEP_FAIL tar"; exit 12; }
         chmod -R +x "$TMP/TrollStore.app" 2>/dev/null
@@ -522,7 +533,13 @@ enum JBInstaller {
           mkdir -p "$APPDIR" || { echo "STEP_FAIL mkdir $APPDIR"; exit 15; }
           DEST="$APPDIR/TrollStore.app"
           rm -rf "$DEST"
-          cp -a "$TMP/TrollStore.app" "$DEST" || { echo "STEP_FAIL cp $DEST"; exit 16; }
+          cp -a "$TMP/TrollStore.app" "$DEST" || {
+            echo "STEP note cp failed, retry container"
+            DEST="/var/mobile/Documents/mst-apps/TrollStore.app"
+            mkdir -p /var/mobile/Documents/mst-apps 2>&1
+            rm -rf "$DEST"
+            cp -a "$TMP/TrollStore.app" "$DEST" || { echo "STEP_FAIL cp $DEST"; exit 16; }
+          }
           chown -R mobile:mobile "$DEST" 2>/dev/null
           chmod -R +x "$DEST" 2>/dev/null
           if [ -x "$Ldid" ]; then
