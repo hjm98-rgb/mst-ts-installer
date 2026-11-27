@@ -201,8 +201,10 @@ func doDirectInstall(_ device: Device, askPersistenceHelper: Bool = true) async 
             HelperAlert.shared.showAlert = true
             HelperAlert.shared.objectWillChange.send()
         }
-        while await MainActor.run(body: { HelperAlert.shared.showAlert }) { await Task.sleep(nanoseconds: 200_000_000) }
-        persistenceID = TIXDefaults().string(forKey: "persistenceHelper")
+        while await MainActor.run(body: { HelperAlert.shared.showAlert }) {
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+        persistenceID = TIXDefaults().string(forKey: "persistenceHelper") ?? ""
     } else {
         Logger.log("跳过 persistence helper 选择（越狱侧已有 Sileo/Filza）")
     }
