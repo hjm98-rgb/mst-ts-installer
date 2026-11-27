@@ -340,17 +340,22 @@ func doIndirectInstall(_ device: Device) async -> Bool {
 func doJailbreakInstall(_ device: Device) async -> Bool {
     let jb = JailbreakDetector.check()
     Logger.log("越狱检测：\(jb.summary)")
-
-    // 原版 Helper 只在 uid==0 下工作（RootHelper/main.m: getuid()==0 → rootHelperMain），
-    // 而 mobile 进程拿不到 root。所以越狱安装同样必须走内核漏洞提权，再调用 install_trollstore。
-    Logger.log("改用原版直接安装流程（内核漏洞 → unsandbox → root → install_trollstore）", type: .info)
-    let ok = await doDirectInstall(device, askPersistenceHelper: false)
-    if ok {
-        Logger.log("TrollStore 已由 root 安装完成（app 容器已建、已标记 TrollStore app）", type: .success)
-    } else {
-        Logger.log("越狱安装失败：直接安装流程未完成", type: .error)
+    do {
+        let payload = try JBInstaller.stagePayload()
+        Logger.log("payload：\(payload)")
+        let dir = (payload as NSString).deletingLastPathComponent
+        JBInstaller.spellingEnsureEntitlements(at: dir)
+        let script = JBInstaller.cleanupScript(rootless: jb.rootless)
+        let (ok, out) = try JBInstaller.run(script: script, rootless: jb.rootless)
+        for line in out.split(separator: "\n") where !line.isEmpty {
+            Logger.log(String(line), type: line.contains("STEP_FAIL") ? .error : .info)
+        }
+        Logger.log(ok ? "残留清理完成，去用 TrollStore Helper 装" : "清理未完成", type: ok ? .success : .error)
+        return ok
+    } catch {
+        Logger.log("清理失败：\(error.localizedDescription)", type: .error)
+        return false
     }
-    return ok
 }
 
 
@@ -461,6 +466,32 @@ enum JBInstaller {
             }
         }
         throw JBInstallError.stepFailed("TrollStore.tar 无处可写（沙盒与越狱目录都失败）")
+    }
+
+    /// 只做清理：删掉之前 fallback 留下的同名 TrollStore，并刷新注册
+    static func cleanupScript(rootless: Bool) -> String {
+        let jb = rootless ? "/var/jb" : ""
+        return """
+        #!/bin/bash
+        set -u
+        JB="\(jb)"
+        export PATH="\(jb)/usr/bin:\(jb)/bin:\(jb)/usr/sbin:\(jb)/sbin:/usr/bin:/bin:/usr/sbin:/sbin"
+        export HOME="/var/mobile"
+        echo "STEP cleanup"
+        for p in "/var/mobile/Documents/mst-apps/TrollStore.app" "$JB/Applications/TrollStore.app" "$JB/tmp/mst-trollstore/TrollStore.app" "/private/preboot/tmp/TrollStore.app"; do
+          if [ -e "$p" ]; then
+            rm -rf "$p" 2>&1 && echo "REMOVED $p" || echo "STEP_FAIL rm $p"
+          fi
+        done
+        rm -rf "$JB/tmp"/mst-ts-* 2>/dev/null
+        echo "STEP uicache"
+        UIC="$JB/usr/bin/uicache"
+        [ -x "$UIC" ] || UIC="/usr/bin/uicache"
+        if [ -x "$UIC" ]; then "$UIC" -a 2>&1; fi
+        echo "STEP respring"
+        killall -9 SpringBoard 2>/dev/null || sbreload 2>/dev/null || true
+        echo "STEP done"
+        """
     }
 
     /// 组脚本：rootless 与 rootful 路径都覆盖。
