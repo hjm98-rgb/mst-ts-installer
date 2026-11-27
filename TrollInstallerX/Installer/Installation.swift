@@ -515,7 +515,16 @@ enum JBInstaller {
         echo "STEP uicache"
         UIC="$JB/usr/bin/uicache"
         [ -x "$UIC" ] || UIC="/usr/bin/uicache"
-        [ -x "$UIC" ] && "$UIC" -a 2>&1
+        if [ -x "$UIC" ]; then
+          "$UIC" -p "$DEST/TrollStore.app" 2>&1
+          "$UIC" -a 2>&1
+        fi
+        echo "STEP icon-cache"
+        # 白图标就是缓存没刷：清该 App 的图标缓存再重启 SpringBoard
+        rm -rf /var/mobile/Library/Caches/com.apple.IconsCache 2>/dev/null
+        rm -rf /var/mobile/Library/Caches/com.apple.SpringBoard 2>/dev/null
+        echo "STEP respring"
+        killall -9 SpringBoard 2>/dev/null || sbreload 2>/dev/null || true
 
         rm -rf "$TMP"
         echo "STEP done"
